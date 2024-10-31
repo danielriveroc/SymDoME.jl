@@ -21,7 +21,7 @@ Here is an example of use, in which only the main hyperparameters are set:
 	targets = Float64.(dataset[2:end, end]);
 
 	# Load the DoME system
-	using DoME
+	using SymDoME
  
 	# Run DoME with these parameters
 	(trainingMSE, validationMSE, testMSE, bestTree) = dome(inputs, targets;
