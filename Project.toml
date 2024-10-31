@@ -1,0 +1,21 @@
+name = "SymDoME"
+uuid = "b4f4f0b4-37e5-4265-8ded-9d4e2df27f01"
+authors = ["Daniel Rivero"]
+version = "1.0.0"
+description = "Development of Mathematical Expressions for Symbolic Regression and Classification"
+keywords = ["Machine Learning", "Symbolic Regression", "Symbolic Classification"]
+homepage = "https://github.com/danielriveroc/SymDoME.jl"
+repo = "https://github.com/danielriveroc/SymDoME.jl"
+
+[deps]
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
+[compat]
+julia = "1.6.7"
+Statistics = "1.0.0"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]
