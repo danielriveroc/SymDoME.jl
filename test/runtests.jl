@@ -1,9 +1,9 @@
-using DoME
+using SymDoME
 using Test
 using Statistics
 
 
-@testset "DoME.jl" begin
+@testset "SymDoME.jl" begin
 
     # Test with a regression problem
     inputs = Float64.(hcat(1:100, 200:-2:1));
