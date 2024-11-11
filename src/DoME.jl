@@ -944,7 +944,7 @@ function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
 
 
         if showText
-            println("           Nuber of nodes: ", numNodes(BestTree), " - Height: ", height(BestTree));
+            println("           Nuber of nodes: ", numNodes(isnothing(BestTree) ? sr.tree : BestTree), " - Height: ", height(isnothing(BestTree) ? sr.tree : BestTree));
             println("-------------------------------------------------------------------------------------")
         end;
 
