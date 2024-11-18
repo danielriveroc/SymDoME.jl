@@ -88,7 +88,12 @@ The description of these parameters is the following:
 
 As it can be sen, this function allows the definition of a validation set.
 
-Once the dome function has been executed, it returns 4 values: training, validation and test results, and the tree found. To convert this tree into a text equation, 5 functions are given: string, vectorString, latexString, spreadsheetString and writeAsTree. The string function returns a text with the equation. latexString returns the equation as a text in LaTeX, ready to use in your documents. spreadsheetString returns the equation as a text ready to use in a spreadsheet. In this case, the attributes in the equation are making reference to the columns in the second row (the first one is supposed to have the names of the attributes), so you only have to paste and drag down the equation. writeAsTree does not return text, but instead it writes the expression on screen as a tree, which can be useful if you want to analyse it.
+Once the dome function has been executed, it returns 4 values: training, validation and test results, and the tree found. To convert this tree into a text equation, 5 functions are provided:
+- string. This function receives the tree and returns a String with the equation.
+- vectorString. This function receives the tree and returns a String with the equation, but it is written to perform vector operations in Julia.
+- latexString. This function received the tree and returns a String with the equation as a text in LaTeX, ready to use in your documents
+- spreadsheetString. This function received the tree and returns a String with the equation ready to use in a spreadsheet. In this case, the attributes in the equation are making reference to the columns in the second row (the first one is supposed to have the names of the attributes), so you only have to paste and drag down the equation. 
+- writeAsTree. This function receives the tree and does not return text, but instead of it, it writes the expression on screen as a tree, which can be useful if you want to analyse it.
 
 An alternative way to run DoME is by creating a DoME struct and calling the function Step! for each iteration. This is automatically done by the previous way to run DoME.
 
