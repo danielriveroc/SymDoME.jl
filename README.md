@@ -4,6 +4,8 @@ This library contains the source code of the DoME algorithm for Symbolic Regress
 
 This library is fully functional, feel free to use it to perform your experiments. However, if any publication is generated through this system, please add a citation to that paper. Also, if you need any more explanations on how to run DoME, or there is any issue with this repository, please let me know.
 
+Note that the results obtained with different versions of the library may be different. This is because, although the underlying mathematics are the same, it is possible that the way the operations are done may be changed to make the operation more efficient. This can lead to some iterations where the results are not exactly the same due to precision problems. This change can propagate over many iterations and eventually lead to different outputs.
+
 To run DoME, only the packages Statistics is needed.
 
 # How to use DoME
