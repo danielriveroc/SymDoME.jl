@@ -6,6 +6,8 @@ This library is fully functional, feel free to use it to perform your experiment
 
 Note that the results obtained with different versions of the library may be different. This is because, although the underlying mathematics are the same, it is possible that the way the operations are done may be changed to make the operation more efficient. This can lead to some iterations where the results are not exactly the same due to precision problems. This change can propagate over many iterations and eventually lead to different outputs.
 
+In addition, given the number of mathematical operations performed, the system can be sensitive to differences in precision. This has a major impact on those calculations whose result may be equal to 0, giving very close values instead. To address this, in this system elements of absolute value less than 1e-10 are simplified as 0. Therefore, although datasets can have arbitrarily high or low values, it is recommended that attributes do not take values less than 1e-10, so that they are not taken as 0.
+
 To run DoME, only the packages Statistics is needed.
 
 # How to use DoME
