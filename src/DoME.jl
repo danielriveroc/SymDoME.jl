@@ -934,7 +934,7 @@ function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
 
             # Print the overall results in test
             if showText && !isempty(testIndices)
-                BestTestMSE, BestTestAccuracy = evaluateTreeIndices(BestTree, testIndices);
+                BestTestMSE, BestTestAccuracy = evaluateTreeIndices(sr.tree, testIndices);
                 println("           test:            MSE: ", BestTestMSE);
                 if classificationProblem
                     println("                       Accuracy: ", BestTestAccuracy);
