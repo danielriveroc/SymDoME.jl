@@ -53,33 +53,33 @@ When calling the function dome, inputs is a NxP matrix of real numbers, and targ
 The declaration of this function is the following, with the whole set of parameters and their default values:
 
 
-function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}};
-    # Each instance in inputs is in a row or in a column
-    dataInRows          ::Bool                     = true,
-    # Hyperparameters of the algorithm
-    minimumReductionMSE ::AbstractFloat            = (eltype(inputs))(1e-6),
-    maximumNodes        ::Int                      = 50 ,
-    strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
-    # Other hyperparameter that the user might find useful
-    maximumHeight       ::Real                     = Inf ,
-    # Stopping criteria
-    goalMSE             ::AbstractFloat            = zero(eltype(inputs)) ,
-    maxIterations       ::Real                     = Inf ,
-    executionTime       ::AbstractFloat            = Inf ,
-    # Whether to use the division operator or not
-    useDivisionOperator ::Bool                     = true ,
-    # Indices of the instances used for validation and test
-    validationIndices   ::AbstractVector{Int64}    = Int64[],
-    testIndices         ::AbstractVector{Int64}    = Int64[],
-    # Initial tree with its MSE
-    initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
-    # Tolerance for comparisons
-    toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
-    # Tolerance to 0
-    tolerance0::AbstractFloat                      = (eltype(inputs))(1e-20) ,
-    # If you want to see the iterations on screen. This makes the execution slower
-    showText            ::Bool                     = false ,
-    )
+	function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}};
+		# Each instance in inputs is in a row or in a column
+		dataInRows          ::Bool                     = true,
+		# Hyperparameters of the algorithm
+		minimumReductionMSE ::AbstractFloat            = (eltype(inputs))(1e-6),
+		maximumNodes        ::Int                      = 50 ,
+		strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
+		# Other hyperparameter that the user might find useful
+		maximumHeight       ::Real                     = Inf ,
+		# Stopping criteria
+		goalMSE             ::AbstractFloat            = zero(eltype(inputs)) ,
+		maxIterations       ::Real                     = Inf ,
+		executionTime       ::AbstractFloat            = Inf ,
+		# Whether to use the division operator or not
+		useDivisionOperator ::Bool                     = true ,
+		# Indices of the instances used for validation and test
+		validationIndices   ::AbstractVector{Int64}    = Int64[],
+		testIndices         ::AbstractVector{Int64}    = Int64[],
+		# Initial tree with its MSE
+		initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
+		# Tolerance for comparisons
+		toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
+		# Tolerance to 0
+		tolerance0::AbstractFloat                      = (eltype(inputs))(1e-20) ,
+		# If you want to see the iterations on screen. This makes the execution slower
+		showText            ::Bool                     = false ,
+	)
 
     
 The description of these parameters is the following:
