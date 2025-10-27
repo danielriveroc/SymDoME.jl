@@ -71,11 +71,11 @@ The declaration of this function is the following, with the whole set of hyperpa
 		validationIndices   ::AbstractVector{Int64}    = Int64[],
 		testIndices         ::AbstractVector{Int64}    = Int64[],
 		# Initial tree with its MSE
-		initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
+		initialTree         ::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
 		# Tolerance for comparisons
 		toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
 		# Tolerance to 0
-		tolerance0::AbstractFloat                      = (eltype(inputs))(1e-20) ,
+		tolerance0          ::AbstractFloat                      = (eltype(inputs))(1e-20) ,
 		# If you want to see the iterations on screen. This makes the execution slower
 		showText            ::Bool                     = false ,
 	)
