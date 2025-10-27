@@ -6,8 +6,6 @@ This library is fully functional, feel free to use it to perform your experiment
 
 Note that the results obtained with different versions of the library may be different. This is because, although the underlying mathematics are the same, it is possible that the way the operations are done may be changed to make the operation more efficient. This can lead to some iterations where the results are not exactly the same due to precision problems. This change can propagate over many iterations and eventually lead to different outputs.
 
-In addition, given the number of mathematical operations performed, the system can be sensitive to differences in precision. This has a major impact on those calculations whose result may be equal to 0, giving very close values instead. To address this, in this system elements of absolute value less than 1e-10 are simplified as 0. Therefore, although datasets can have arbitrarily high or low values, it is recommended that attributes do not take values less than 1e-10, so that they are not taken as 0.
-
 To run DoME, only the packages Statistics is needed.
 
 # How to use DoME
@@ -28,7 +26,7 @@ Here is an example of use, in which only the main hyperparameters are set:
 	using SymDoME
  
 	# Run DoME with these parameters
-	(trainingMSE, validationMSE, testMSE, bestTree) = dome(inputs, targets;
+	bestTree, trainingMSE, validationMSE, testMSE = dome(inputs, targets;
 	   minimumReductionMSE = 1e-6,
 	   maximumNodes = 30,
 	   strategy = StrategyExhaustive,
@@ -54,28 +52,35 @@ When calling the function dome, inputs is a NxP matrix of real numbers, and targ
 
 The declaration of this function is the following, with the whole set of parameters and their default values:
 
-	function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
-	    # Each instance in inputs is in a row or in a column
-	    dataInRows          ::Bool                     = true,
-	    # Hyperparameters of the algorithm
-	    minimumReductionMSE ::Real                     = 1e-6,
-	    maximumNodes        ::Int64                    = 50 ,
-	    strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
-	    # Other hyperparameter that the user might find useful
-	    maximumHeight       ::Real                     = Inf ,
-	    # Stopping criteria
-	    goalMSE             ::Real                     = 0 ,
-	    maxIterations       ::Real                     = Inf ,
-	    # Whether to use the division operator or not
-	    useDivisionOperator ::Bool                     = true ,
-	    # Indices of the instances used for validation and test
-	    validationIndices   ::AbstractVector{Int64}    = Int64[],
-	    testIndices         ::AbstractVector{Int64}    = Int64[],
-	    # Function to be called at the end of each iteration
-	    callFunction        ::Union{Nothing, Function} = nothing ,
-	    # If you want to see the iterations on screen. This makes the execution slower
-	    showText            ::Bool                     = false ,
-	    )
+
+function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}};
+    # Each instance in inputs is in a row or in a column
+    dataInRows          ::Bool                     = true,
+    # Hyperparameters of the algorithm
+    minimumReductionMSE ::AbstractFloat            = (eltype(inputs))(1e-6),
+    maximumNodes        ::Int                      = 50 ,
+    strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
+    # Other hyperparameter that the user might find useful
+    maximumHeight       ::Real                     = Inf ,
+    # Stopping criteria
+    goalMSE             ::AbstractFloat            = zero(eltype(inputs)) ,
+    maxIterations       ::Real                     = Inf ,
+    executionTime       ::AbstractFloat            = Inf ,
+    # Whether to use the division operator or not
+    useDivisionOperator ::Bool                     = true ,
+    # Indices of the instances used for validation and test
+    validationIndices   ::AbstractVector{Int64}    = Int64[],
+    testIndices         ::AbstractVector{Int64}    = Int64[],
+    # Initial tree with its MSE
+    initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
+    # Tolerance for comparisons
+    toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
+    # Tolerance to 0
+    tolerance0::AbstractFloat                      = (eltype(inputs))(1e-20) ,
+    # If you want to see the iterations on screen. This makes the execution slower
+    showText            ::Bool                     = false ,
+    )
+
     
 The description of these parameters is the following:
 
@@ -86,13 +91,18 @@ The description of these parameters is the following:
 	maximumHeight -> maximum height of the tree. As explained in the paper, this parameter is not recommended to be used in the experiments.
 	goalMSE -> if the algorithm reaches this MSE value in training, the iterative process is stopped.
 	maxIterations -> maximum number of iterations to be performed.
+	executionTime -> if this training time is exceeded, the training process will stop when the current cycle ends
+	useDivisionOperator -> set ti to tru or false in case you want to use or not the division operator
 	validationIndices -> allows to split the dataset by separating some instances to perform the validation, specifying which ones will be used for validation.
 	testIndices -> allows to split the dataset by separating some instances to perform the test, specifying which ones will be used for test.
+	initialTree -> allows to begin the search with a tree from a previous execution
+	toleranceComparisons -> relative tolerance used for the comparisons
+	tolerance0 -> absolute tolerance used for the comparisons with 0
 	showText -> if it is set to true, on each iteration some text (iteration number, best tree, MSE in training and test) is shown.
 
 As it can be sen, this function allows the definition of a validation set.
 
-Once the dome function has been executed, it returns 4 values: training, validation and test results, and the tree found. To convert this tree into a text equation, 5 functions are provided:
+Once the dome function has been executed, it returns 4 values: the tree found, and training, validation and test results. To convert this tree into a text equation, 5 functions are provided:
 - string. This function receives the tree and returns a String with the equation.
 - vectorString. This function receives the tree and returns a String with the equation, but it is written to perform vector operations in Julia.
 - latexString. This function received the tree and returns a String with the equation as a text in LaTeX, ready to use in your documents
