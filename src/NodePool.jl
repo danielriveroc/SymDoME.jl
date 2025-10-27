@@ -7,12 +7,12 @@ mutable struct NodePool
     heights::Array{UInt,1}
     semantics::Array{Semantic}
     hasZerosInSemantics::Array{Bool,1}
-    toleranceValue::Real
+    toleranceValue::AbstractFloat
     NodePool() = new([],[],[],[],[], 0.);
 end
 
 
-function NodePoolVariables(inputs::AbstractArray{<:Real,2}; dataInRows::Bool=true)
+function NodePoolVariables(inputs::AbstractArray{<:AbstractFloat,2}; dataInRows::Bool=true)
     # Create variables, add them to the node pool and to the prototypes
     if (dataInRows)
         variableValues = collect.(eachcol(inputs));
@@ -38,7 +38,7 @@ function NodePoolVariables(inputs::AbstractArray{<:Real,2}; dataInRows::Bool=tru
     return nodePoolVariables;
 end;
 
-function setVariableValues!(tree::Tree, nodePoolVariables::NodePool, inputs::AbstractArray{<:Real,2}; dataInRows::Bool=true)
+function setVariableValues!(tree::Tree, nodePoolVariables::NodePool, inputs::AbstractArray{<:AbstractFloat,2}; dataInRows::Bool=true)
     function findVariable(numVariable::UInt)
         for index in Base.OneTo(nodePoolVariables.length(nodes))
             (nodePoolVariables.nodes[index].variableNumber == numVariable) && return index;

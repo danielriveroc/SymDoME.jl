@@ -31,8 +31,8 @@ end
 
 mutable struct Constant <: Terminal
     @addEquationField
-    semantic::Real
-    Constant(value::Real) = new(nothing, value)
+    semantic::AbstractFloat
+    Constant(value::AbstractFloat) = new(nothing, value)
 end
 
 # mutable struct RandomConstant <: Terminal
@@ -209,6 +209,58 @@ function string(node::NonBinaryNode)
     return text;
 end;
 
+# function string(node::Constant)
+#     numDecimals = 30;
+#     v = node.semantic
+#     iszero(v) && return "0"
+#     # !contains(str, ".")
+#     function number_to_string(x)
+#         # # Primero multiplicamos por 10^decimales y truncamos
+#         # factor = 10^numDecimals
+#         # truncated = trunc(x * factor) / factor
+        
+#         # # Convertimos a string y aseguramos que tenga todos los decimales
+#         # str = string(truncated)
+        
+#         # # Si no tiene punto decimal, añadimos .0
+#         # if !contains(str, ".")
+#         #     str = str * ".0"
+#         # end
+        
+#         # # Añadimos ceros si faltan decimales
+#         # parts = split(str, ".")
+#         # if length(parts) == 2 && length(parts[2]) < numDecimals
+#         #     str = str * "0"^(numDecimals - length(parts[2]))
+#         # end
+        
+#         # return str
+#         x_integer = trunc(x);
+#         x==x_integer && return string(Int(x_integer));
+#         str = string(x_integer)*".";
+#         x_decimal = abs(x-x_integer)
+#         str_decimals = Vector{UInt}(undef, numDecimals)
+#         for numDecimal in Base.OneTo(numDecimals)
+#             x_decimal = x_decimal*10;
+#             x_decimal_int = trunc(x_decimal);
+#             str_decimals[numDecimal] = UInt(x_decimal_int);
+#             x_decimal = x_decimal-x_decimal_int;
+#         end;
+#         # println(string(string.(str_decimals)...))
+#         return string(string.(str_decimals)...)
+#     end
+#     d = floor(Int, log10(abs(v)));
+#     if abs(d)<=3
+#         s = number_to_string(v);
+#         # s = string(BigFloat(v))
+#         return v>0 ? s : "("*s*")"
+#     end;
+#     mantissa = v * ((10.)^(-d));
+#     mantissa = BigFloat(mantissa)
+#     # s = @sprintf("%.3f", v);
+#     # s = s*"\\cdot 10^{$d}"
+#     return "($(number_to_string(mantissa))e$(d)"
+# end;
+
 
 vectorString(node::Constant; dataInRows=true) = node.semantic>=0 ? string(node.semantic) : string("(",node.semantic,")");
 # vectorString(node::RandomConstant; dataInRows=true) = error("");
@@ -291,6 +343,90 @@ function spreadsheetString(tree::Tree)
     return "="*ssString(tree);
 end;
 
+# Tuple(node::Constant) = node.semantic;
+# Tuple(node::Variable) = node.variableNumber;
+# Tuple(node::BinaryNode) = (node.name, Tuple(node.child1), Tuple(node.child2));
+
+asTuple(node::Constant) = node.semantic;
+asTuple(node::Variable) = node.variableNumber;
+asTuple(node::BinaryNode) = (node.name, asTuple(node.child1), asTuple(node.child2));
+
+asVector(node::Constant) = node.semantic;
+asVector(node::Variable) = node.variableNumber;
+asVector(node::BinaryNode) = [node.name, asVector(node.child1), asVector(node.child2)];
+
+evaluateTree(nodeDescription::AbstractFloat, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true) = nodeDescription;
+function evaluateTree(nodeDescription::UInt, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true)
+    if dataInRows
+        nodeDescription>size(dataset,2) && error("Not enough columns in the dataset");
+        return view(dataset, :, nodeDescription);
+    else
+        nodeDescription>size(dataset,1) && error("Not enough rows in the dataset");
+        return view(dataset, nodeDescription, :);
+    end;
+end;
+function evaluateTree(nodeDescription::Tuple, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true)
+    @assert(length(nodeDescription)==3)
+    op = nodeDescription[1];
+    if op=="+"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) .+ evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    elseif op=="-"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) .- evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    elseif op=="*"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) .* evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    elseif op=="/"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) ./ evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    else
+        error("Unknown operator")
+    end;
+end;
+function evaluateTree(nodeDescription::Vector, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true)
+    @assert(length(nodeDescription)==3)
+    op = nodeDescription[1];
+    if op=="+"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) .+ evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    elseif op=="-"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) .- evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    elseif op=="*"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) .* evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    elseif op=="/"
+        return evaluateTree(nodeDescription[2], dataset; dataInRows=dataInRows) ./ evaluateTree(nodeDescription[3], dataset; dataInRows=dataInRows);
+    else
+        error("Unknown operator")
+    end;
+end;
+evaluateTree(tree, instance::AbstractVector{<:AbstractFloat}) = evaluateTree(tree, reshape(instance, 1, :); dataInRows=true)[1];
+
+
+function evaluateTree(expression::String, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true)
+
+    numVariables = size(dataset, dataInRows ? 2 : 1);
+
+    if occursin("X[",expression)
+        if dataInRows && occursin(",:]",expression)
+            for numInput in numVariables:-1:1
+                expression = replace(expression, "X[$numInput,:]" => "X[:,$numInput]");
+            end;
+        elseif (!dataInRows) && occursin("X[:,",expression)
+            for numInput in numVariables:-1:1
+                expression = replace(expression, "X[:,$numInput]" => "X[$numInput,:]");
+            end;
+        end;
+    elseif occursin("X",expression)
+        expression = replace(expression, "+" => " .+ ");
+        expression = replace(expression, "e-" => "R_R");
+        expression = replace(expression, "-" => " .- ");
+        expression = replace(expression, "R_R" => "e-");
+        expression = replace(expression, "*" => " .* ");
+        expression = replace(expression, "/" => " ./ ");
+        for numInput in numVariables:-1:1
+            expression = replace(expression, "X$numInput" => dataInRows ? "X[:,$numInput]" : "X[$numInput,:]");
+        end;
+    end;
+    func = eval(Meta.parse(string("X -> ", expression)));
+    return Base.invokelatest(func, dataset);
+
+end;
 
 
 writeIndentSpaces(n) = ( for i=1:n print(" "); end; )
@@ -309,6 +445,7 @@ function evaluateTree(tree::BinaryNode; checkForErrors=false)
     if isnothing(tree.semantic)
         # tree.semantic = tree.evalFunction( evaluateTree(tree.child1;checkForErrors=checkForErrors), evaluateTree(tree.child2;checkForErrors=checkForErrors), nothing );
         tree.semantic = tree.evalFunction( evaluateTree(tree.child1;checkForErrors=checkForErrors), evaluateTree(tree.child2;checkForErrors=checkForErrors), tree.semantic );
+        # tree.semantic = tree.evalFunction( evaluateTree(tree.child1;checkForErrors=checkForErrors), evaluateTree(tree.child2;checkForErrors=checkForErrors) );
     end;
     return tree.semantic;
 end;
@@ -318,15 +455,15 @@ function evaluateTree(tree::NonBinaryNode; checkForErrors=false)
         tree.semantic = tree.evalFunction( evaluationChildren... );
     end;
     if (checkForErrors)
-        @assert(!any(isinf.(tree.semantic)));
-        @assert(!any(isnan.(tree.semantic)));
+        @assert(!any(isinf, tree.semantic));
+        @assert(!any(isnan, tree.semantic));
     end;
     return tree.semantic;
 end;
 
 
-evaluateTree(node::Constant, dataset::AbstractArray{<:Real,2}; dataInRows=true) = node.semantic;
-function evaluateTree(node::Variable, dataset::AbstractArray{<:Real,2}; dataInRows=true)
+evaluateTree(node::Constant, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true) = node.semantic;
+function evaluateTree(node::Variable, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true)
     if dataInRows
         node.variableNumber>size(dataset,2) && error("Not enough columns in the dataset");
         return view(dataset, :, node.variableNumber);
@@ -336,12 +473,12 @@ function evaluateTree(node::Variable, dataset::AbstractArray{<:Real,2}; dataInRo
     end;
 end;
 # evaluateTree(node::RandomConstant, dataset::AbstractArray{<:Real,2}; dataInRows=true) = error("");
-evaluateTree(node::BinaryNode, dataset::AbstractArray{<:Real,2}; dataInRows=true) = node.evalFunction( evaluateTree(node.child1, dataset; dataInRows=dataInRows), evaluateTree(node.child2, dataset; dataInRows=dataInRows) );
-function evaluateTree(node::NonBinaryNode, dataset::AbstractArray{<:Real,2}; dataInRows=true)
+evaluateTree(node::BinaryNode, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true) = node.evalFunction( evaluateTree(node.child1, dataset; dataInRows=dataInRows), evaluateTree(node.child2, dataset; dataInRows=dataInRows) );
+function evaluateTree(node::NonBinaryNode, dataset::AbstractArray{<:AbstractFloat,2}; dataInRows=true)
     evaluationChildren = [evaluateTree(child, dataset; dataInRows=dataInRows) for child in node.children];
     return node.evalFunction( evaluationChildren... );
 end;
-
+evaluateTree(tree::Tree, instance::AbstractVector{<:AbstractFloat}) = evaluateTree(tree, reshape(instance, 1, :); dataInRows=true)[1];
 
 
 reevaluatePath(tree::Terminal, path::Array{Int64,1}, indexPath::Int64; checkForErrors=false) = tree.semantic;
@@ -429,14 +566,26 @@ end
 calculateEquations!(tree::Terminal, equation::NodeEquation; path=nothing, indexPath=1, checkForErrors=false) = ( tree.equation = equation; );
 function calculateEquations!(tree::BinaryNode, equation::NodeEquation; path=nothing, indexPath=1, checkForErrors=false)
     if (checkForErrors)
-        @assert (tree.semantic != nothing);
+        @assert(!isnothing(tree.semantic));
         checkEquation(equation);
     end;
     tree.equation = equation;
 
     if isnothing(path)
-        calculateEquations!(tree.child1, tree.functionEquationChild1( evaluateTree(tree.child2; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
-        calculateEquations!(tree.child2, tree.functionEquationChild2( evaluateTree(tree.child1; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
+        # if isnothing(tree.child1.equation)
+        #     calculateEquations!(tree.child1, tree.functionEquationChild1( evaluateTree(tree.child2; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
+        # else
+        #     calculateEquations!(tree.child1, tree.child1.equation                                                                            ; checkForErrors=checkForErrors );
+        # end;
+        # if isnothing(tree.child2.equation)
+        #     calculateEquations!(tree.child2, tree.functionEquationChild2( evaluateTree(tree.child1; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
+        # else
+        #     calculateEquations!(tree.child2, tree.child2.equation                                                                            ; checkForErrors=checkForErrors );
+        # end;
+        # calculateEquations!(tree.child1, tree.functionEquationChild1( evaluateTree(tree.child2; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
+        # calculateEquations!(tree.child2, tree.functionEquationChild2( evaluateTree(tree.child1; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
+        calculateEquations!(tree.child1, !isnothing(tree.child1.equation) ? tree.child1.equation : tree.functionEquationChild1( evaluateTree(tree.child2; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
+        calculateEquations!(tree.child2, !isnothing(tree.child2.equation) ? tree.child2.equation : tree.functionEquationChild2( evaluateTree(tree.child1; checkForErrors=checkForErrors), equation); checkForErrors=checkForErrors );
     else
         (indexPath>length(path)) && return
         if (path[indexPath]==1)
@@ -484,57 +633,91 @@ end;
 
 
 
+# replaceSubtree!(tree::Terminal, oldSubTree::Tree, newSubTree::Tree) = false;
 replaceSubtree!(tree::Terminal, oldSubTree::Tree, newSubTree::Tree) = false;
 function replaceSubtree!(tree::BinaryNode, oldSubTree::Tree, newSubTree::Tree)
     replaced = false;
-    if (tree.child1==oldSubTree)
+    if (tree.child1===oldSubTree)
+        newSubTree.equation = tree.child1.equation;
         tree.child1 = newSubTree;
+        clearEquations!(tree.child2);
+# clearEquations!(tree.child1);
         replaced = true;
-    elseif (tree.child2==oldSubTree)
+    elseif (tree.child2===oldSubTree)
+        newSubTree.equation = tree.child2.equation;
         tree.child2 = newSubTree;
+        clearEquations!(tree.child1);
+# clearEquations!(tree.child2);
         replaced = true;
     else
         replaced = replaceSubtree!(tree.child1, oldSubTree, newSubTree);
-        if !replaced
+        if replaced
+            clearEquations!(tree.child2);
+        else
             replaced = replaceSubtree!(tree.child2, oldSubTree, newSubTree);
+            replaced && clearEquations!(tree.child1);
         end;
     end;
     if (replaced)
+        # tree.semantic = nothing; evaluateTree(tree);
         tree.semantic = reevaluatePath(tree, Int64[]);
         return true;
     end;
+# clearEquations!(tree);
     return false;
 end
-function replaceSubtree!(tree::NonBinaryNode, oldSubTree::Tree, newSubTree::Tree)
-	for numChild in 1:length(tree.children)
-        child = tree.children[numChild]
-        if (child==oldSubTree)
-            tree.children[numChild] = newSubTree;
-            tree.semantic = reevaluatePath(tree, Int64[]);
-            return true;
-        else
-            if (replaceSubtree!(child, oldSubTree, newSubTree))
-                tree.semantic = reevaluatePath(tree, Int64[]);
-                return true;
-            end;
-        end;
-    end;
-    return false;
-end
+# function replaceSubtree!(tree::BinaryNode, oldSubTree::Tree, newSubTree::Tree)
+#     replaced = false;
+#     if (tree.child1==oldSubTree)
+#         tree.child1 = newSubTree;
+#         replaced = true;
+#     elseif (tree.child2==oldSubTree)
+#         tree.child2 = newSubTree;
+#         replaced = true;
+#     else
+#         replaced = replaceSubtree!(tree.child1, oldSubTree, newSubTree);
+#         if !replaced
+#             replaced = replaceSubtree!(tree.child2, oldSubTree, newSubTree);
+#         end;
+#     end;
+#     if (replaced)
+#         tree.semantic = reevaluatePath(tree, Int64[]);
+#         return true;
+#     end;
+#     return false;
+# end
+# function replaceSubtree!(tree::NonBinaryNode, oldSubTree::Tree, newSubTree::Tree)
+# 	for numChild in 1:length(tree.children)
+#         child = tree.children[numChild]
+#         if (child==oldSubTree)
+#             tree.children[numChild] = newSubTree;
+#             tree.semantic = reevaluatePath(tree, Int64[]);
+#             return true;
+#         else
+#             if (replaceSubtree!(child, oldSubTree, newSubTree))
+#                 tree.semantic = reevaluatePath(tree, Int64[]);
+#                 return true;
+#             end;
+#         end;
+#     end;
+#     return false;
+# end
 
 
 
-function checkEquations(tree::Tree, mse::Real, targets::Semantic)
-    @assert(!any(isnan.(tree.semantic)));
-    @assert(!any(isinf.(tree.semantic)));
+# function checkEquations(tree::Tree, mse::Real, targets::Semantic)
+function checkEquations(tree::Tree, mse::AbstractFloat)
+    @assert(!any(isnan, tree.semantic));
+    @assert(!any(isinf, tree.semantic));
     if (tree.equation!=nothing)
         checkEquation(tree.equation);
 # println( (mse, MSE(calculateOutputsFromEquation(tree.semantic, tree.equation; checkForErrors=true), targets, M, M0)) );
-        @assert(equal(mse, calculateMSEFromEquation(tree.semantic, tree.equation; checkForErrors=true); tolerance=1e-2));
+# if !isapprox_DoME(mse, calculateMSEFromEquation(tree.semantic, tree.equation; checkForErrors=true))
+        # @assert(isapprox_DoME(mse, calculateMSEFromEquation(tree.semantic, tree.equation; checkForErrors=true)));
     end;
     if (isa(tree,BinaryNode))
-        checkEquations(tree.child1, mse, targets)
-        checkEquations(tree.child2, mse, targets)
+        checkEquations(tree.child1, mse)
+        checkEquations(tree.child2, mse)
     elseif (isa(tree,NonBinaryNode))
         for numChild in 1:length(tree.children)
             checkEquations(tree.children[numChild], mse)
@@ -546,7 +729,12 @@ end;
 
 floatType(node::Constant) = eltype(node.semantic);
 floatType(node::Variable) = eltype(node.semantic);
-floatType(node::BinaryNode) = isnothing(node.semantic) ? floatType(node.child1) : eltype(node.semantic);
+function floatType(node::BinaryNode)
+    !isnothing(node.semantic) && return eltype(node.semantic);
+    floatTypeChild1 = floatType(node.child1);
+    !isnothing(floatTypeChild1) && return floatTypeChild1;
+    return floatType(node.child2);
+end;
 
 
 function buildTreeOrder(order::Integer, variables::AbstractArray{Variable,1}, floatType::DataType)

@@ -4,7 +4,20 @@ using Statistics
 include("NodePool.jl")
 
 @inline MSE(y::Semantic, t::AbstractArray{<:Real,1}) = mean((y.-t).^2);
-@inline Accuracy(y::Semantic, t::AbstractArray{<:Real,1}) = eltype(t)==Bool ?  mean((y .>= 0) .== t) : mean((y.>=0) .== (t.>=0));
+# @inline MSE(y::AbstractFloat,                    t::AbstractArray{<:Real,1}) = mean([(y  -t_i)^2 for       t_i  in        t ]);
+# @inline MSE(y::AbstractArray{<:AbstractFloat,1}, t::AbstractArray{<:Real,1}) = mean([(y_i-t_i)^2 for (y_i, t_i) in zip(y, t)]);
+
+# @inline Accuracy(y::Bool,                             t::AbstractArray{<:Bool,1}         ) = mean(y.==t);
+# Change for this:
+@inline Accuracy(y::Bool,                             t::AbstractArray{<:Bool,1}         ) = y ? mean(t) : 1-mean(t);
+@inline Accuracy(y::Bool,                             t::AbstractArray{<:AbstractFloat,1}) = Accuracy(y, t.>=0); # It is assumed that there is no NaN in t
+@inline Accuracy(y::AbstractFloat,                    t::AbstractArray{<:Bool,1}         ) = isnan(y) ? 0. : Accuracy(y>=0, t);
+@inline Accuracy(y::AbstractFloat,                    t::AbstractArray{<:AbstractFloat,1}) = isnan(y) ? 0. : Accuracy(y>=0, t);
+@inline Accuracy(y::AbstractArray{<:AbstractFloat,1}, t::AbstractArray{<:Bool,1}         ) = mean([isnan(y_i) ? false : (y_i>=0)== t_i     for (y_i, t_i) in zip(y, t)]);
+@inline Accuracy(y::AbstractArray{<:AbstractFloat,1}, t::AbstractArray{<:AbstractFloat,1}) = mean([isnan(y_i) ? false : (y_i>=0)==(t_i>=0) for (y_i, t_i) in zip(y, t)]);
+@inline Accuracy(y::AbstractArray{<:Bool,1},          t::AbstractArray{<:AbstractFloat,1}) = mean([                      y_i    ==(t_i>=0) for (y_i, t_i) in zip(y, t)]);
+@inline Accuracy(y::AbstractArray{<:Bool,1},          t::AbstractArray{<:Bool,1}         ) = mean(y.==t);
+
 
 
 
@@ -17,9 +30,9 @@ include("NodePool.jl")
 #
 
 mutable struct SearchResults
-    MSEReduction::Array{<:Real,1}
+    MSEReduction::Array{<:AbstractFloat,1}
     numNode::Array{Int,1}
-    constant::Array{<:Real,1}
+    constant::Array{<:AbstractFloat,1}
     numVariableNodePool::Array{Int,1}
     operation::Array{Int,1}
     nodePoolVariables::NodePool
@@ -48,8 +61,8 @@ end;
 resetSearchResults!(sr::SearchResults) = ( sr.index = 0; )
 
 
-@inbounds function addVariableSearchResult!(sr::SearchResults, MSEReduction::Real, numNode::Int, numVariableNodePool::Int)
-    (MSEReduction<0 || isnan(MSEReduction)) && return;
+@inbounds function addVariableSearchResult!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, numVariableNodePool::Int)
+    (!isfinite(MSEReduction) || MSEReduction<0) && return;
     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
     sr.index += 1;
     sr.MSEReduction[sr.index] = MSEReduction;
@@ -57,10 +70,11 @@ resetSearchResults!(sr::SearchResults) = ( sr.index = 0; )
     sr.constant[sr.index] = NaN;
     sr.operation[sr.index] = -1;
     sr.numVariableNodePool[sr.index] = numVariableNodePool;
+# @assert(all(x -> isfinite(x), sr.MSEReduction[1:sr.index]))
 end;
 
-@inbounds function addConstantSearchResult!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real)
-    (MSEReduction<0 || isnan(MSEReduction)) && return;
+@inbounds function addConstantSearchResult!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat)
+    (!isfinite(MSEReduction) || MSEReduction<0) && return;
     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
     sr.index += 1;
     sr.MSEReduction[sr.index] = MSEReduction;
@@ -68,10 +82,28 @@ end;
     sr.constant[sr.index] = constant;
     sr.operation[sr.index] = -1;
     sr.numVariableNodePool[sr.index] = -1;
+# @assert(all(x -> isfinite(x), sr.MSEReduction[1:sr.index]))
 end;
 
-@inbounds function addConstantVariableSearchResult!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real, operation::Int, numVariableNodePool::Int)
-    (MSEReduction<0 || isnan(MSEReduction)) && return;
+# @inbounds function addConstantSearchResult2!(sr::SearchResults, numNode::Int, constant::Real, MSEReduction::Real)
+#     (MSEReduction<0 || isnan(MSEReduction)) && return;
+#     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
+#     sr.index += 1;
+#     sr.MSEReduction[sr.index] = MSEReduction;
+#     sr.numNode[sr.index] = numNode;
+#     sr.constant[sr.index] = constant;
+#     sr.operation[sr.index] = -1;
+#     sr.numVariableNodePool[sr.index] = -1;
+# end;
+
+# function addConstantSearchResult2!(sr::SearchResults, numNode::Int, constants::AbstractArray{<:Real}, MSEReductions::AbstractArray{<:Real})
+#     @inbounds for (constant, MSEreduction) in zip(constants, MSEReductions)
+#         addConstantSearchResult2!(sr, numNode, constant, MSEReduction)
+#     end;
+# end;
+
+@inbounds function addConstantVariableSearchResult!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat, operation::Int, numVariableNodePool::Int)
+    (!isfinite(MSEReduction) || MSEReduction<0) && return;
     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
     sr.index += 1;
     sr.MSEReduction[sr.index] = MSEReduction;
@@ -79,15 +111,38 @@ end;
     sr.constant[sr.index] = constant;
     sr.operation[sr.index] = operation;
     sr.numVariableNodePool[sr.index] = numVariableNodePool;
+# @assert(all(x -> isfinite(x), sr.MSEReduction[1:sr.index]))
 end;
 
-@inline addConstantVariableSearchResult_Add!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 1, numVariableNodePool)
-@inline addConstantVariableSearchResult_Sub!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 2, numVariableNodePool)
-@inline addConstantVariableSearchResult_Mul!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 3, numVariableNodePool)
-@inline addConstantVariableSearchResult_Div!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 4, numVariableNodePool)
+# @inbounds function addConstantVariableSearchResult2!(sr::SearchResults, numNode::Int, operation::Int, numVariableNodePool::Int, constant::Real, MSEReduction::Real)
+#     (MSEReduction<0 || isnan(MSEReduction)) && return;
+#     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
+#     sr.index += 1;
+#     sr.MSEReduction[sr.index] = MSEReduction;
+#     sr.numNode[sr.index] = numNode;
+#     sr.constant[sr.index] = constant;
+#     sr.operation[sr.index] = operation;
+#     sr.numVariableNodePool[sr.index] = numVariableNodePool;
+# end;
 
-@inbounds function addConstantExpressionSearchResult!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real, operation::Int)
-    (MSEReduction<0 || isnan(MSEReduction)) && return;
+# function addConstantVariableSearchResult2!(sr::SearchResults, numNode::Int, operation::Int, numVariableNodePool::Int, constants::AbstractArray{<:Real}, MSEReductions::AbstractArray{<:Real})
+#     @inbounds for (constant, MSEReduction) in zip(constants, MSEReductions)
+#         addConstantVariableSearchResult2!(sr, numNode, operation, numVariableNodePool, constant, MSEReduction)
+#     end;
+# end;
+
+@inline addConstantVariableSearchResult_Add!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 1, numVariableNodePool)
+@inline addConstantVariableSearchResult_Sub!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 2, numVariableNodePool)
+@inline addConstantVariableSearchResult_Mul!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 3, numVariableNodePool)
+@inline addConstantVariableSearchResult_Div!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat, numVariableNodePool::Int) = addConstantVariableSearchResult!(sr, MSEReduction, numNode, constant, 4, numVariableNodePool)
+
+# @inline addConstantVariableSearchResult_Add2!(sr::SearchResults, numNode::Int, numVariableNodePool::Int, constants::Union{Real,AbstractArray{<:Real,1}}, MSEReductions::Union{Real,AbstractArray{<:Real,1}}) = addConstantVariableSearchResult2!(sr, numNode, 1, numVariableNodePool, constants, MSEReductions)
+# @inline addConstantVariableSearchResult_Sub2!(sr::SearchResults, numNode::Int, numVariableNodePool::Int, constants::Union{Real,AbstractArray{<:Real,1}}, MSEReductions::Union{Real,AbstractArray{<:Real,1}}) = addConstantVariableSearchResult2!(sr, numNode, 1, numVariableNodePool, constants, MSEReductions)
+# @inline addConstantVariableSearchResult_Mul2!(sr::SearchResults, numNode::Int, numVariableNodePool::Int, constants::Union{Real,AbstractArray{<:Real,1}}, MSEReductions::Union{Real,AbstractArray{<:Real,1}}) = addConstantVariableSearchResult2!(sr, numNode, 1, numVariableNodePool, constants, MSEReductions)
+# @inline addConstantVariableSearchResult_Div2!(sr::SearchResults, numNode::Int, numVariableNodePool::Int, constants::Union{Real,AbstractArray{<:Real,1}}, MSEReductions::Union{Real,AbstractArray{<:Real,1}}) = addConstantVariableSearchResult2!(sr, numNode, 1, numVariableNodePool, constants, MSEReductions)
+
+@inbounds function addConstantExpressionSearchResult!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat, operation::Int)
+    (!isfinite(MSEReduction) || MSEReduction<0) && return;
     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
     sr.index += 1;
     sr.MSEReduction[sr.index] = MSEReduction;
@@ -95,10 +150,31 @@ end;
     sr.constant[sr.index] = constant;
     sr.operation[sr.index] = operation;
     sr.numVariableNodePool[sr.index] = -1;
+# @assert(all(x -> isfinite(x), sr.MSEReduction[1:sr.index]))
 end;
 
-@inline addConstantExpressionSearchResult_Add!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real) = addConstantExpressionSearchResult!(sr, MSEReduction, numNode, constant, 1)
-@inline addConstantExpressionSearchResult_Mul!(sr::SearchResults, MSEReduction::Real, numNode::Int, constant::Real) = addConstantExpressionSearchResult!(sr, MSEReduction, numNode, constant, 3)
+# @inbounds function addConstantExpressionSearchResult2!(sr::SearchResults, numNode::Int, operation::Int, constant::Real, MSEReduction::Real)
+#     (!isfinite(MSEReduction) || MSEReduction<0) && return;
+#     (sr.index>=length(sr.MSEReduction)) && increaseSize!(sr);
+#     sr.index += 1;
+#     sr.MSEReduction[sr.index] = MSEReduction;
+#     sr.numNode[sr.index] = numNode;
+#     sr.constant[sr.index] = constant;
+#     sr.operation[sr.index] = operation;
+#     sr.numVariableNodePool[sr.index] = -1;
+# end;
+
+# @inline function addConstantExpressionSearchResult2!(sr::SearchResults, numNode::Int, operation::Int, constants::AbstractArray{<:Real}, MSEReductions::AbstractArray{<:Real})
+#     for (constants, MSEReductions) in zip(constants, MSEReductions)
+#         addConstantExpressionSearchResult2!(sr, numNode, operation, constants, MSEReductions)
+#     end;
+# end;
+
+@inline addConstantExpressionSearchResult_Add!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat) = addConstantExpressionSearchResult!(sr, MSEReduction, numNode, constant, 1)
+@inline addConstantExpressionSearchResult_Mul!(sr::SearchResults, MSEReduction::AbstractFloat, numNode::Int, constant::AbstractFloat) = addConstantExpressionSearchResult!(sr, MSEReduction, numNode, constant, 3)
+
+# @inline addConstantExpressionSearchResult_Add2!(sr::SearchResults, numNode::Int, constants::Union{Real,AbstractArray{<:Real,1}}, MSEReductions::Union{Real,AbstractArray{<:Real,1}}) = addConstantExpressionSearchResult2!(sr, numNode, 1, constants, MSEReductions)
+# @inline addConstantExpressionSearchResult_Mul2!(sr::SearchResults, numNode::Int, constants::Union{Real,AbstractArray{<:Real,1}}, MSEReductions::Union{Real,AbstractArray{<:Real,1}}) = addConstantExpressionSearchResult2!(sr, numNode, 3, constants, MSEReductions)
 
 
 @inbounds function bestSearchResult!(sr::SearchResults, nodeList::Array{Tree,1})
@@ -107,6 +183,7 @@ end;
 
     sr.index<=0 && return nothing;
     (bestMSEReduction, index) = findmax(view(sr.MSEReduction, 1:sr.index));
+    # @assert(isfinite(bestMSEReduction) || bestMSEReduction==-Inf);
     bestMSEReduction<0 && return nothing;
     numNode = sr.numNode[index];
     constant = sr.constant[index];
@@ -140,45 +217,55 @@ end;
 
 mutable struct DoME
     tree::Tree
-    mse::Real
-    goalMSE::Real
+    mse::AbstractFloat
+    goalMSE::AbstractFloat
     nodePoolVariables::NodePool
-    inputs::Array{<:Real,2}
+    inputs::Array{<:AbstractFloat,2}
     dataInRows::Bool
-    targets::Array{<:Real,1}
+    targets::Array{<:AbstractFloat,1}
     initialEquation::NodeEquation
-    minimumReductionMSE::Real
-    maximumHeight::Number
-    maximumNodes::Number
+    minimumReductionMSE::AbstractFloat
+    maximumHeight::Real
+    maximumNodes::Real
     strategy::Function
     useDivisionOperator::Bool
     searchResults::SearchResults
     checkForErrors::Bool
-    function DoME(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
+    function DoME(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}};
         # Each instance in inputs is in a row or in a column
         dataInRows          ::Bool                     = true,
         # Hyperparameters of the algorithm
-        minimumReductionMSE ::Real                     = 1e-6,
-        maximumNodes        ::Int64                    = 50 ,
+        minimumReductionMSE ::AbstractFloat            = eltype(inputs)(1e-6),
+        maximumNodes        ::Int                      = 50 ,
         strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
         # Other hyperparameter that the user might find useful
-        maximumHeight       ::Real                     = Inf ,
+        maximumHeight       ::AbstractFloat            = Inf ,
         # Another stopping criteria
-        goalMSE             ::Real                     = 0 ,
+        goalMSE             ::AbstractFloat            = zero(Float32) ,
         # Whether to use the division operator or not
         useDivisionOperator ::Bool                     = true ,
         # Initial tree with its MSE
-        initialTree::Union{Nothing,Tree,Tuple{Tree,Real}} = nothing ,
+        initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
+        # Tolerance for comparisons
+        toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
+        # Tolerance to 0
+        tolerance0::AbstractFloat                      = eltype(inputs)(1e-15) ,
         # This parameter was used only for development. If it is set to true, the execution becomes much slower
         checkForErrors      ::Bool                     = false
     )
 
-        @assert(!any(isnan.(inputs)));
-        @assert(!any(isinf.(inputs)));
-        @assert(eltype(inputs)==Float32 || eltype(inputs)==Float64);
+        @assert(!any(isnan, inputs));
+        @assert(!any(isinf, inputs));
+        @assert(!any(isnan, targets));
+        @assert(!any(isinf, targets));
+        eltype(targets)!=Bool && @assert(eltype(inputs)==eltype(targets));
+        @assert(eltype(inputs)==Float32 || eltype(inputs)==Float64 || eltype(inputs)==Float16);
         @assert(length(targets)==size(inputs, dataInRows ? 1 : 2), "Inputs and targets have different number of instances");
 
-        uniqueTargets = sort(unique(targets));
+        global DoME_ToleranceApprox = (eltype(inputs))(toleranceComparisons);
+        global DoME_Tolerance0 = (eltype(inputs))(tolerance0);
+
+        # uniqueTargets = sort(unique(targets));
         # @assert(length(uniqueTargets)>1);
         classificationProblem = eltype(targets)==Bool;
         if classificationProblem
@@ -208,7 +295,7 @@ mutable struct DoME
         elseif isa(initialTree, Tree)
             updateTree!(obj, initialTree; overwriteOnlyIfBetter=false);
         elseif isa(initialTree, Tuple)
-            updateTree!(obj, initialTree...; overwriteOnlyIfBetter=false);
+            updateTree!(obj, initialTree[1]; mse=initialTree[2], overwriteOnlyIfBetter=false);
         end;
 
         return obj;
@@ -216,7 +303,7 @@ mutable struct DoME
 end;
 
 
-function updateTree!(obj::DoME, tree::Tree; mse::Real=NaN, overwriteOnlyIfBetter::Bool=false)
+function updateTree!(obj::DoME, tree::Tree; mse::AbstractFloat=NaN, overwriteOnlyIfBetter::Bool=false)
     tree = clone(tree; resetSemantic=true);
     if !setVariableValues!(tree, obj.nodePoolVariables)
         error("The tree has a number of variables higher than the dataset");
@@ -232,9 +319,18 @@ function updateTree!(obj::DoME, tree::Tree; mse::Real=NaN, overwriteOnlyIfBetter
     end;
 end;
 
+# updateTree!(obj::DoME, tree::Tree, mse::AbstractFloat; overwriteOnlyIfBetter::Bool=false) = updateTree!(obj, tree; mse=mse, overwriteOnlyIfBetter=overwriteOnlyIfBetter);
 
 
-function updateDataset!(obj::DoME, inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1}; dataInRows::Bool=true)
+function updateDataset!(obj::DoME, inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}}; dataInRows::Bool=true)
+    @assert(!any(isnan, inputs));
+    @assert(!any(isinf, inputs));
+    @assert(!any(isnan, targets));
+    @assert(!any(isinf, targets));
+    eltype(targets)!=Bool && @assert(eltype(inputs)==eltype(targets));
+    @assert(eltype(inputs)==Float32 || eltype(inputs)==Float64 || eltype(inputs)==Float16);
+    @assert(length(targets)==size(inputs, dataInRows ? 1 : 2), "Inputs and targets have different number of instances");
+
     maxVariableIndex(node::Constant) = 0;
     maxVariableIndex(node::Variable) = node.variableNumber;
     maxVariableIndex(node::BinaryNode) = max(maxVariableIndex(node.child1), maxVariableIndex(node.child2));
@@ -244,6 +340,17 @@ function updateDataset!(obj::DoME, inputs::AbstractArray{<:Real,2}, targets::Abs
     end;
     newNodePoolVariables = NodePoolVariables(inputs; dataInRows=dataInRows);
     setVariableValues!(obj.tree, newNodePoolVariables)
+
+    classificationProblem = eltype(targets)==Bool;
+    if classificationProblem
+        # if (eltype(targets)==Bool) || uniqueTargets==[0, 1]
+            targets = (eltype(inputs).(targets) .* 2) .- 1;
+        # end;
+        # @assert(length(targets)>=2)
+    else
+        @assert(eltype(inputs)==eltype(targets));
+    end;
+
     obj.inputs = inputs;
     obj.targets = targets;
     obj.tree = newTree;
@@ -263,7 +370,7 @@ end;
 #
 
 
-function variableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePoolVariables::NodePool, mse::Real, targets::Array{<:Real,1}, whichNodesPerformVariableSearch::Union{DataType,Union}; checkForErrors=false)
+function variableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePoolVariables::NodePool, mse::AbstractFloat, targets::Array{<:AbstractFloat,1}, whichNodesPerformVariableSearch::Union{DataType,Union}; checkForErrors=false)
 
     if (checkForErrors)
         @assert(unique(nodePoolVariables.heights)==[1]);
@@ -285,12 +392,14 @@ function variableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePoolVariab
 
             semantic = nodePoolVariables.semantics[indexNodePool];
 
-            isa(semantic, Real) && continue;
+            isa(semantic, AbstractFloat) && continue;
 
             # If the semantic of the variable is not in the domain, do not check it
             semanticNotInDomain(semantic, node.equation) && continue;
 
-            newMSE = MSE(semantic, targets);
+            # newMSE = MSE(semantic, targets);
+            newMSE = calculateMSEFromEquation(semantic, node.equation; checkForErrors=checkForErrors);
+
             reduction = mse - newMSE;
             addVariableSearchResult!(sr, reduction, numNode, indexNodePool);
 
@@ -301,19 +410,23 @@ function variableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePoolVariab
 end;
 
 
-function constantSearch!(sr::SearchResults, nodes::Array{Tree,1}, mse::Real, numNodes::Array{UInt,1}, targets::Array{<:Real,1}, whichNodesPerformConstantSearch::Union{DataType,Union}; checkForErrors=false)
+function constantSearch!(sr::SearchResults, nodes::Array{Tree,1}, mse::AbstractFloat, numNodes::Array{UInt,1}, targets::Array{<:AbstractFloat,1}, whichNodesPerformConstantSearch::Union{DataType,Union}; checkForErrors=false)
 
     for numNode in 2:length(nodes)
         node = nodes[numNode];
         if isa(node, whichNodesPerformConstantSearch) && !isNaN(node.equation.S)
-            (constant, reduction) = calculateConstantMinimizeEquation(node.equation, mse; checkForErrors=checkForErrors);
-            addConstantSearchResult!(sr, reduction, numNode, constant);
+            # (constant, reduction) = calculateConstantMinimizeEquation(node.equation, mse; checkForErrors=checkForErrors);
+            # addConstantSearchResult!(sr, reduction, numNode, constant);
+            (constants, reductions) = calculateConstantMinimizeEquation(node.equation, mse; checkForErrors=checkForErrors);
+            for (constant, reduction) in zip(constants, reductions)
+                addConstantSearchResult!(sr, reduction, numNode, constant);
+            end;
         end;
     end;
 end;
 
 
-function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePool::NodePool, mse::Real, targets::Array{<:Real,1}, useDivisionOperator::Bool, maximumHeights, maximumNodes, whichNodesPerformConstantVariableSearch::Union{DataType,Union}; checkForErrors=false)
+function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePool::NodePool, mse::AbstractFloat, targets::Array{<:AbstractFloat,1}, useDivisionOperator::Bool, maximumHeights, maximumNodes, whichNodesPerformConstantVariableSearch::Union{DataType,Union}; checkForErrors=false)
 
     for numNode in 1:length(nodes)
 
@@ -337,7 +450,7 @@ function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePo
 
             semantic = nodeVariable.semantic;
 
-            isa(semantic, Real) && continue;
+            isa(semantic, AbstractFloat) && continue;
 
             # if ( (!isa(node,BinaryNode)) || (node.name!="+") || (!isa(node.child1,Constant)) || (!isa(node.child2,Variable)) || (node.child2.variableNumber!=numVar) )
             if ( (!isa(node,BinaryNode)) || (node.name!="+") || (!isa(node.child1,Constant)) || (!isa(node.child2,Variable)) || (node.child2.variableNumber!=nodeVariable.variableNumber) )
@@ -345,8 +458,15 @@ function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePo
                 if (checkForErrors) checkEquation(equationConstant); end;
                 # If there are possible values in the domain
                 if (!isNaN(equationConstant.S))
-                    (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
-                    addConstantVariableSearchResult_Add!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    # (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                    # addConstantVariableSearchResult_Add!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    (constants, reductionsMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                    for (constant, reductionMSE) in zip(constants, reductionsMSE)
+                        addConstantVariableSearchResult_Add!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    end;
+                    # addConstantVariableSearchResult_Add2!(sr, numNode, indexNodePool,
+                    #     calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors)...);
+                    
                 end;
             end;
 
@@ -356,8 +476,12 @@ function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePo
                 if (checkForErrors) checkEquation(equationConstant); end;
                 # If there are possible values in the domain
                 if (!isNaN(equationConstant.S))
-                    (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
-                    addConstantVariableSearchResult_Sub!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    # (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                    # addConstantVariableSearchResult_Sub!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    (constants, reductionsMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                    for (constant, reductionMSE) in zip(constants, reductionsMSE)
+                        addConstantVariableSearchResult_Sub!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    end;
                 end;
             end;
 
@@ -367,8 +491,12 @@ function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePo
                 if (checkForErrors) checkEquation(equationConstant) end;
                 # If there are possible values in the domain
                 if (!isNaN(equationConstant.S))
-                    (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
-                    addConstantVariableSearchResult_Mul!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    # (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                    # addConstantVariableSearchResult_Mul!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    (constants, reductionsMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                    for (constant, reductionMSE) in zip(constants, reductionsMSE)
+                        addConstantVariableSearchResult_Mul!(sr, reductionMSE, numNode, constant, indexNodePool);
+                    end;
                 end;
             end;
 
@@ -379,8 +507,12 @@ function constantVariableSearch!(sr::SearchResults, nodes::Array{Tree,1}, nodePo
                     if (checkForErrors) checkEquation(equationConstant); end;
                     # If there are possible values in the domain
                     if (!isNaN(equationConstant.S))
-                        (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
-                        addConstantVariableSearchResult_Div!(sr, reductionMSE, numNode, constant, indexNodePool);
+                        # (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                        # addConstantVariableSearchResult_Div!(sr, reductionMSE, numNode, constant, indexNodePool);
+                        (constants, reductionsMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                        for (constant, reductionMSE) in zip(constants, reductionsMSE)
+                            addConstantVariableSearchResult_Div!(sr, reductionMSE, numNode, constant, indexNodePool);
+                        end;
                     end;
                 end;
             end;
@@ -392,7 +524,7 @@ end;
 
 
 
-function constantExpressionSearch!(sr::SearchResults, nodes::Array{Tree,1}, mse::Real, targets::Array{<:Real,1}, heights, maximumHeights, numNodes, maximumNodes; checkForErrors=false)
+function constantExpressionSearch!(sr::SearchResults, nodes::Array{Tree,1}, mse::AbstractFloat, targets::Array{<:AbstractFloat,1}, heights, maximumHeights, numNodes, maximumNodes; checkForErrors=false)
 
     # Search only on non terminal nodes
     # for numNode in findall(isa.(nodes,NonTerminal) .& (heights.<maximumHeights) .& ((numNodes.+2).<=maximumNodes))
@@ -414,8 +546,12 @@ function constantExpressionSearch!(sr::SearchResults, nodes::Array{Tree,1}, mse:
             if (checkForErrors) checkEquation(equationConstant); end;
             # If there are possible values in the domain
             if (!isNaN(equationConstant.S))
-                (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
-                addConstantExpressionSearchResult_Add!(sr, reductionMSE, numNode, constant);
+                # (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                # addConstantExpressionSearchResult_Add!(sr, reductionMSE, numNode, constant);
+                (constants, reductionsMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                for (constant, reductionMSE) in zip(constants, reductionsMSE)
+                    addConstantExpressionSearchResult_Add!(sr, reductionMSE, numNode, constant);
+                end;
             end;
         end
 
@@ -424,8 +560,12 @@ function constantExpressionSearch!(sr::SearchResults, nodes::Array{Tree,1}, mse:
             if (checkForErrors) checkEquation(equationConstant); end;
             # If there are possible values in the domain
             if (!isNaN(equationConstant.S))
-                (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
-                addConstantExpressionSearchResult_Mul!(sr, reductionMSE, numNode, constant);
+                # (constant, reductionMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                # addConstantExpressionSearchResult_Mul!(sr, reductionMSE, numNode, constant);
+                (constants, reductionsMSE) = calculateConstantMinimizeEquation(equationConstant, mse; checkForErrors=checkForErrors);
+                for (constant, reductionMSE) in zip(constants, reductionsMSE)
+                    addConstantExpressionSearchResult_Mul!(sr, reductionMSE, numNode, constant);
+                end;
             end;
         end;
 
@@ -437,7 +577,130 @@ end;
 
 
 
+# function OptimizeConstants!(obj::DoME)
+
+#     nodes, = iterateTree(obj.tree);
+
+#     constantNodes = [isa(node,Constant) for node in nodes];
+#     nodes = nodes[constantNodes];
+#     isempty(nodes) && return nothing;
+#     pathsToConstantNodes = findNode.([obj.tree], nodes);
+
+#     if (length(nodes)==1)
+#         calculateEquations!(obj.tree, obj.initialEquation, path=pathsToConstantNodes[1]; checkForErrors=obj.checkForErrors);
+#         node = nodes[1];
+#         minimumReduction = obj.minimumReductionMSE * obj.mse;
+#         (constant, reduction) = calculateConstantMinimizeEquation(node.equation, obj.mse; checkForErrors=obj.checkForErrors);
+#         # for (constant, reduction) in zip(constants, reductions)
+#         # end;
+
+#         clearEquations!(obj.tree);
+#         if (reduction>minimumReduction) && (constant!=nodes[1].semantic)
+#             node.semantic = constant;
+#             mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[1]; checkForErrors=obj.checkForErrors), obj.targets);
+#             if (obj.checkForErrors)
+#                 @assert(isa(node, Constant))
+#                 @assert(!isnan(mse));
+#                 @assert(equal(mse+reduction, obj.mse));
+#             end;
+#             obj.mse = mse;
+#         end;
+#         return nothing;
+#     end;
+
+#     numNode = 0;
+#     numIterationsWithNoImprovement = 0;
+#     while (true)
+
+#         numNode = (numNode>=length(nodes)) ? 1 : numNode+1;
+
+#         calculateEquations!(obj.tree, obj.initialEquation; path=pathsToConstantNodes[numNode], checkForErrors=obj.checkForErrors)
+
+#         if (obj.checkForErrors)
+#             checkEquations(obj.tree, obj.mse, obj.targets);
+#         end;
+
+#         minimumReduction = obj.minimumReductionMSE * obj.mse;
+#         (constant, reduction) = calculateConstantMinimizeEquation(nodes[numNode].equation, obj.mse; checkForErrors=obj.checkForErrors);
+
+#         clearEquations!(obj.tree);
+#         if (reduction>minimumReduction) && (constant!=nodes[numNode].semantic)
+
+#             oldConstant = nodes[numNode].semantic;
+#             nodes[numNode].semantic = constant;
+
+#             mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[numNode]; checkForErrors=obj.checkForErrors), obj.targets);
+
+#             # Check that the resulting MSE is lower than the previous MSE in obj.minimumReductionMSE
+#             # This is expected to be. However, precision errors may happen
+#             # if (mse >= (obj.mse - (obj.minimumReductionMSE * obj.mse)))
+#             if (mse > (obj.mse - (obj.minimumReductionMSE * obj.mse)))
+
+#                 # Undo the change in the tree
+#                 nodes[numNode].semantic = oldConstant;
+#                 obj.mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[numNode]; checkForErrors=obj.checkForErrors), obj.targets);
+#                 # obj.checkForErrors && @assert(mse==obj.mse);
+#                 numIterationsWithNoImprovement += 1;
+#                 if (numIterationsWithNoImprovement>=length(nodes))
+#                     return;
+#                 end;
+
+#             else
+
+#                 if (obj.checkForErrors)
+#                     @assert(isa(nodes[numNode], Constant))
+#                     @assert(!isnan(mse));
+#                     # @assert(equal(mse+reduction, obj.mse));
+#                 end;
+#                 obj.mse = mse;
+#                 numIterationsWithNoImprovement = 0;
+
+#             end;
+#         else
+#             numIterationsWithNoImprovement += 1;
+#             if (numIterationsWithNoImprovement>=length(nodes))
+#                 return;
+#             end;
+#         end;
+#     end;
+
+# end;
+
+
 function OptimizeConstants!(obj::DoME)
+
+    function updateTree!(numNode::Int, constant::AbstractFloat, reduction::AbstractFloat)
+
+        minimumReduction = obj.minimumReductionMSE * obj.mse;
+        node = nodes[numNode];
+        obj.checkForErrors && @assert(isa(node, Constant));
+        oldConstant = node.semantic;
+        if (reduction>minimumReduction) && !isapprox_DoME(constant, oldConstant)
+            node.semantic = constant;
+            mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[numNode]; checkForErrors=obj.checkForErrors), obj.targets);
+            if !isfinite(mse) || (mse > (obj.mse - minimumReduction))
+                # Undo the change
+                node.semantic = oldConstant;
+                reevaluatePath(obj.tree, pathsToConstantNodes[numNode]; checkForErrors=obj.checkForErrors);
+                obj.checkForErrors && @assert(obj.mse == MSE(evaluateTree(obj.tree; checkForErrors=obj.checkForErrors), obj.targets));
+                return false;
+            end;
+            obj.checkForErrors && @assert(isfinite(mse));
+            obj.checkForErrors && @assert(isapprox(mse+reduction, obj.mse; rtol=1e-5));
+            obj.mse = mse;
+            clearEquations!(obj.tree);
+            return true;
+        end;
+        # No change has been done
+        return false;
+    end;
+
+    function updateTree!(numNode::Int, constants::AbstractArray{<:AbstractFloat}, reductions::AbstractArray{<:AbstractFloat})
+        @inbounds for index in sortperm(reductions; rev=true)
+            updateTree!(numNode, constants[index], reductions[index]) && return true;
+        end;
+        return false;
+    end;
 
     nodes, = iterateTree(obj.tree);
 
@@ -448,21 +711,8 @@ function OptimizeConstants!(obj::DoME)
 
     if (length(nodes)==1)
         calculateEquations!(obj.tree, obj.initialEquation, path=pathsToConstantNodes[1]; checkForErrors=obj.checkForErrors);
-        node = nodes[1];
-        minimumReduction = obj.minimumReductionMSE * obj.mse;
-        (constant, reduction) = calculateConstantMinimizeEquation(node.equation, obj.mse; checkForErrors=obj.checkForErrors);
-
-        clearEquations!(obj.tree);
-        if (reduction>minimumReduction) && (constant!=nodes[1].semantic)
-            node.semantic = constant;
-            mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[1]; checkForErrors=obj.checkForErrors), obj.targets);
-            if (obj.checkForErrors)
-                @assert(isa(node, Constant))
-                @assert(!isnan(mse));
-                @assert(equal(mse+reduction, obj.mse));
-            end;
-            obj.mse = mse;
-        end;
+        obj.checkForErrors && checkEquations(obj.tree, obj.mse, obj.targets);
+        updateTree!(1, calculateConstantMinimizeEquation(nodes[1].equation, obj.mse; checkForErrors=obj.checkForErrors)...);
         return nothing;
     end;
 
@@ -472,52 +722,14 @@ function OptimizeConstants!(obj::DoME)
 
         numNode = (numNode>=length(nodes)) ? 1 : numNode+1;
 
-        calculateEquations!(obj.tree, obj.initialEquation; path=pathsToConstantNodes[numNode], checkForErrors=obj.checkForErrors)
-
-        if (obj.checkForErrors)
-            checkEquations(obj.tree, obj.mse, obj.targets);
-        end;
-
-        minimumReduction = obj.minimumReductionMSE * obj.mse;
-        (constant, reduction) = calculateConstantMinimizeEquation(nodes[numNode].equation, obj.mse; checkForErrors=obj.checkForErrors);
-
-        clearEquations!(obj.tree);
-        if (reduction>minimumReduction) && (constant!=nodes[numNode].semantic)
-
-            oldConstant = nodes[numNode].semantic;
-            nodes[numNode].semantic = constant;
-
-            mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[numNode]; checkForErrors=obj.checkForErrors), obj.targets);
-
-            # Check that the resulting MSE is lower than the previous MSE in obj.minimumReductionMSE
-            # This is expected to be. However, precision errors may happen
-            if (mse >= (obj.mse - (obj.minimumReductionMSE * obj.mse)))
-
-                # Undo the change in the tree
-                nodes[numNode].semantic = oldConstant;
-                obj.mse = MSE(reevaluatePath(obj.tree, pathsToConstantNodes[numNode]; checkForErrors=obj.checkForErrors), obj.targets);
-                # obj.checkForErrors && @assert(mse==obj.mse);
-                numIterationsWithNoImprovement += 1;
-                if (numIterationsWithNoImprovement>=length(nodes))
-                    return;
-                end;
-
-            else
-
-                if (obj.checkForErrors)
-                    @assert(isa(nodes[numNode], Constant))
-                    @assert(!isnan(mse));
-                    # @assert(equal(mse+reduction, obj.mse));
-                end;
-                obj.mse = mse;
-                numIterationsWithNoImprovement = 0;
-
-            end;
+        calculateEquations!(obj.tree, obj.initialEquation; path=pathsToConstantNodes[numNode], checkForErrors=obj.checkForErrors);
+        obj.checkForErrors && checkEquations(obj.tree, obj.mse, obj.targets);
+        treeUpdated = updateTree!(numNode, calculateConstantMinimizeEquation(nodes[numNode].equation, obj.mse; checkForErrors=obj.checkForErrors)...);
+        if treeUpdated
+            numIterationsWithNoImprovement = 0;
         else
             numIterationsWithNoImprovement += 1;
-            if (numIterationsWithNoImprovement>=length(nodes))
-                return;
-            end;
+            numIterationsWithNoImprovement>=length(nodes) && return;
         end;
     end;
 
@@ -541,14 +753,18 @@ function PerformSearches!(obj::DoME;
     (nodes, heights, depths, _, numNodesEach) = iterateTree(obj.tree);
 
     # If the equations of the nodes were already calculated (the last search was unsuccessful), do not calculate them again
-    if isnothing(obj.tree.equation)
+    # if isnothing(obj.tree.equation)
+    if any(node -> isnothing(node.equation), nodes)
         calculateEquations!(obj.tree, obj.initialEquation)
     end;
 
-    if (obj.checkForErrors)
-        checkEquations(obj.tree, obj.mse, obj.targets);
+    if obj.checkForErrors
+        # checkEquations(obj.tree, obj.mse, obj.targets);
+        checkEquations(obj.tree, obj.mse);
         # The equation must be correct: none of the semantic sets must be NaN (meaning that there are possible values in the domain)
+        calculateEquations!(obj.tree, obj.initialEquation)
         for node in nodes
+            @assert(!isnothing(node.equation))
             @assert(!isNaN(node.equation.S))
         end;
     end;
@@ -608,11 +824,11 @@ function PerformSearches!(obj::DoME;
         end;
 
         mse = MSE(evaluateTree(obj.tree; checkForErrors=obj.checkForErrors), obj.targets);
-        obj.checkForErrors && @assert(equal(obj.mse,mse+maximumReduction; tolerance=1e-4));
+        obj.checkForErrors && DoME_UseSSet && @assert(isapprox(obj.mse,mse+maximumReduction; rtol=1e-4));
 
         # Check that the resulting MSE is lower than the previous MSE in obj.minimumReductionMSE
         # This is expected to be. However, precision errors may happen
-        if (mse < (obj.mse - (obj.minimumReductionMSE * obj.mse)))
+        if isfinite(mse) && (mse < (obj.mse - (obj.minimumReductionMSE * obj.mse)))
             obj.mse = mse;
             return true;
         end;
@@ -743,26 +959,31 @@ end;
 # The function is an interface that creates the DoME object and calls the function Step! on each iteration
 #
 
-function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
+function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}};
     # Each instance in inputs is in a row or in a column
     dataInRows          ::Bool                     = true,
     # Hyperparameters of the algorithm
-    minimumReductionMSE ::Real                     = 1e-6,
-    maximumNodes        ::Int64                    = 50 ,
+    minimumReductionMSE ::AbstractFloat            = eltype(inputs(1e-6)),
+    maximumNodes        ::Int                      = 50 ,
     strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
     # Other hyperparameter that the user might find useful
     maximumHeight       ::Real                     = Inf ,
     # Stopping criteria
-    goalMSE             ::Real                     = 0 ,
+    goalMSE             ::AbstractFloat            = zero(eltype(inputs)) ,
     maxIterations       ::Real                     = Inf ,
-    executionTime       ::Real                     = Inf ,
+    executionTime       ::AbstractFloat            = Inf ,
     # Whether to use the division operator or not
     useDivisionOperator ::Bool                     = true ,
     # Indices of the instances used for validation and test
     validationIndices   ::AbstractVector{Int64}    = Int64[],
     testIndices         ::AbstractVector{Int64}    = Int64[],
     # Initial tree with its MSE
-    initialTree::Union{Nothing,Tree,Tuple{Tree,Real}} = nothing ,
+    initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
+    # Tolerance for comparisons
+    # toleranceComparisons::AbstractFloat            = (eltype(inputs)<:Integer) && (eltype(targets)<:Integer) ? zero(eltype(inputs)) : sqrt(eps(eltype(inputs)<:Integer ? eltype(targets) : eltype(inputs))) ,
+    toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
+    # Tolerance to 0
+    tolerance0::AbstractFloat                      = eltype(inputs)(1e-20) ,
     # Function to be called at the end of each iteration
     callFunction        ::Union{Nothing, Function} = nothing ,
     # If you want to see the iterations on screen. This makes the execution slower
@@ -838,6 +1059,8 @@ function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
         goalMSE = eltype(inputs)(goalMSE) ,
         useDivisionOperator = useDivisionOperator ,
         initialTree = initialTree ,
+        toleranceComparisons = toleranceComparisons ,
+        tolerance0 = tolerance0 ,
         checkForErrors = checkForErrors
     );
 
@@ -845,36 +1068,30 @@ function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
 
     iteration = 0;
 
-    BestTrainingMSE      =  Inf; BestValidationMSE      =  Inf; BestTestMSE      =  Inf;
-    BestTrainingAccuracy = -Inf; BestValidationAccuracy = -Inf; BestTestAccuracy = -Inf;
+    BestTrainingMSE      =  Inf; BestValidationMSE      = isempty(validationIndices) ? NaN :  Inf; BestTestMSE      = isempty(testIndices) ? NaN :  Inf;
+    BestTrainingAccuracy = -Inf; BestValidationAccuracy = isempty(validationIndices) ? NaN : -Inf; BestTestAccuracy = isempty(testIndices) ? NaN : -Inf;
     BestExpression = ""; BestTree =  nothing; # BestM = NaN; BestM0 = NaN;
-
 
     function evaluateTreeIndices(tree, indices; evaluateAsString::Bool=false)
         if evaluateAsString
-            func = eval(Meta.parse(string("X -> ", vectorString(tree; dataInRows=dataInRows))));
-            outputs = Base.invokelatest(func, inputs);
-            if classificationProblem
-                return ( MSE(isa(outputs,Real) ? outputs : outputs[indices], (targets[indices].*2).-1 ), Accuracy(isa(outputs,Real) ? outputs : outputs[indices], (targets[indices].*2).-1 ) );
-            else
-                return ( MSE(isa(outputs,Real) ? outputs : outputs[indices],  targets[indices]        ), NaN );
-            end;
+            outputs = evaluateTree(vectorString(tree; dataInRows=dataInRows), dataInRows ? view(inputs, indices, :) : view(inputs, :, indices))
         else
             outputs = evaluateTree(tree, dataInRows ? view(inputs, indices, :) : view(inputs, :, indices))
-            if classificationProblem
-                return ( MSE(outputs , (view(targets, indices).*2).-1 ), Accuracy( outputs , (view(targets, indices).*2).-1 ) );
-            else
-                return ( MSE(outputs ,  view(targets, indices)        ), NaN );
-            end;
         end;
+        if classificationProblem
+            return ( MSE(outputs , (view(targets, indices).*2).-1 ), Accuracy( outputs , view(targets, indices) ) );
+        else
+            return ( MSE(outputs ,  view(targets, indices)        ), NaN );
+        end;
+        # end;
     end;
 
     function evaluateIteration()
         if (showText)
             BestTrainingMSE = sr.mse;
             if checkForErrors
-                @assert( BestTrainingMSE == evaluateTreeIndices(sr.tree, validationIndices; evaluateAsString=false)[1] )
-                @assert( BestTrainingMSE == evaluateTreeIndices(sr.tree, validationIndices; evaluateAsString=true )[1] )
+                @assert( BestTrainingMSE == evaluateTreeIndices(sr.tree, trainingIndices; evaluateAsString=false)[1] )
+                @assert( BestTrainingMSE == evaluateTreeIndices(sr.tree, trainingIndices; evaluateAsString=true )[1] )
             end;
             println(" Iteration ", iteration);
             println(" Expression: ", string(sr.tree));
@@ -990,7 +1207,7 @@ function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
         BestTrainingMSE = sr.mse;
         BestTrainingAccuracy = isinf(BestTrainingAccuracy) ? Accuracy(evaluateTree(sr.tree), sr.targets) : BestTrainingAccuracy;
         checkForErrors && @assert(BestTrainingAccuracy == evaluateTreeIndices(BestTree, trainingIndices)[2])
-        if isinf(BestTestMSE)
+        if isinf(BestTestMSE) && !isempty(testIndices)
             BestTestMSE, BestTestAccuracy = evaluateTreeIndices(BestTree, testIndices);
         end;
     end;
@@ -999,6 +1216,6 @@ function dome(inputs::AbstractArray{<:Real,2}, targets::AbstractArray{<:Real,1};
         println("Best expression found: ", string(BestTree));
     end;
 
-    return classificationProblem ? (BestTrainingAccuracy, BestValidationAccuracy, BestTestAccuracy, BestTree) : (BestTrainingMSE, BestValidationMSE, BestTestMSE, BestTree);
+    return classificationProblem ? (BestTree, BestTrainingAccuracy, BestValidationAccuracy, BestTestAccuracy) : (BestTree, BestTrainingMSE, BestValidationMSE, BestTestMSE);
 
 end;
