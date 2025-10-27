@@ -75,7 +75,7 @@ The declaration of this function is the following, with the whole set of hyperpa
 		# Tolerance for comparisons
 		toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
 		# Tolerance to 0
-		tolerance0          ::AbstractFloat                      = (eltype(inputs))(1e-20) ,
+		tolerance0          ::AbstractFloat            = (eltype(inputs))(1e-20) ,
 		# If you want to see the iterations on screen. This makes the execution slower
 		showText            ::Bool                     = false ,
 	)
