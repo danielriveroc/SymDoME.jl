@@ -50,8 +50,7 @@ Here is an example of use, in which only the main hyperparameters are set:
 
 When calling the function dome, inputs is a NxP matrix of real numbers, and targets is a N-length vector or real numbers (N: number of instances, P: number of attributes). Inputs and targets can have Float32 or Float64 values; however, since many constants are generated during the run of the algorithm, it is recommended to use Float64 to have the highest precision. Also, the elements of both inputs and targets must have the same type (Float32 or Float64). The parameters minimumReductionMSE, maximumNodes and strategy are the 3 hyperparameters described in the paper.
 
-The declaration of this function is the following, with the whole set of parameters and their default values:
-
+The declaration of this function is the following, with the whole set of hyperparameters and their default values:
 
 	function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractArray{<:AbstractFloat,1},AbstractArray{<:Bool,1}};
 		# Each instance in inputs is in a row or in a column
