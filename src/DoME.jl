@@ -963,7 +963,7 @@ function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractA
     # Each instance in inputs is in a row or in a column
     dataInRows          ::Bool                     = true,
     # Hyperparameters of the algorithm
-    minimumReductionMSE ::AbstractFloat            = eltype(inputs(1e-6)),
+    minimumReductionMSE ::AbstractFloat            = (eltype(inputs))(1e-6),
     maximumNodes        ::Int                      = 50 ,
     strategy            ::Function                 = StrategySelectiveWithConstantOptimization ,
     # Other hyperparameter that the user might find useful
@@ -978,12 +978,12 @@ function dome(inputs::AbstractArray{<:AbstractFloat,2}, targets::Union{AbstractA
     validationIndices   ::AbstractVector{Int64}    = Int64[],
     testIndices         ::AbstractVector{Int64}    = Int64[],
     # Initial tree with its MSE
-    initialTree::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
+    initialTree         ::Union{Nothing,Tree,Tuple{Tree,AbstractFloat}} = nothing ,
     # Tolerance for comparisons
     # toleranceComparisons::AbstractFloat            = (eltype(inputs)<:Integer) && (eltype(targets)<:Integer) ? zero(eltype(inputs)) : sqrt(eps(eltype(inputs)<:Integer ? eltype(targets) : eltype(inputs))) ,
     toleranceComparisons::AbstractFloat            = sqrt(eps(eltype(inputs))) ,
     # Tolerance to 0
-    tolerance0::AbstractFloat                      = eltype(inputs)(1e-20) ,
+    tolerance0          ::AbstractFloat            = (eltype(inputs))(1e-20) ,
     # Function to be called at the end of each iteration
     callFunction        ::Union{Nothing, Function} = nothing ,
     # If you want to see the iterations on screen. This makes the execution slower
